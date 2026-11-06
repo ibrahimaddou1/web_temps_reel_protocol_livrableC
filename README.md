@@ -170,3 +170,27 @@ Imal reçoit les deux messages dans l’ordre. La file est conservée tant que l
 Les messages exigent metadata.source et metadata.target sous forme d’origines HTTP, et metadata.timestamp au format ISO avec fuseau horaire. La commande message du serveur construit ces champs.
 
 Le premier message est accepté avec 201. Le même quadruplet action, source, target et timestamp reçoit 208. Cette convention de doublon reste à valider avec la classe. La mémoire des doublons et les files sont effacées au redémarrage.
+
+## Livrable C — Découverte et connexions directes
+
+Chaque processus pair joue le rôle de serveur et de client WebSocket. Il s’annonce au tracker, récupère la liste des pairs et ouvre jusqu’à deux connexions sortantes vers d’autres pairs. Les annonces et la découverte sont renouvelées toutes les 10 secondes.
+
+Depuis livrableC, démarrer le tracker dans un terminal :
+
+```bash
+npm run tracker -- 4000
+```
+
+Démarrer ensuite trois pairs dans trois terminaux distincts :
+
+```bash
+npm run pair -- ibrahim ws://localhost:3001/ws http://localhost:4000
+npm run pair -- imal ws://localhost:3002/ws http://localhost:4000
+npm run pair -- zack ws://localhost:3003/ws http://localhost:4000
+```
+
+Chaque terminal doit afficher Connexion directe avec suivi de l’identifiant du pair distant, au plus tard après le prochain cycle de découverte. Vérifier aussi la liste avec curl http://localhost:4000/peers.
+
+Chaque connexion échange un message hello contenant l’identifiant déclaré. Deux pairs peuvent chacun ouvrir une connexion vers l’autre. La limite de deux concerne les connexions sortantes, les connexions entrantes sont acceptées séparément. Ctrl+C arrête un pair. Son annonce expire après 30 secondes.
+
+Pour plusieurs ordinateurs, utiliser l’IP accessible de chaque pair et l’IP du tracker. Cette étape implémente la découverte et l’ouverture des connexions. Les identifiants échangés sont déclaratifs.
