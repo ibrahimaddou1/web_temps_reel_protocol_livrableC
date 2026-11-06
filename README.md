@@ -29,7 +29,7 @@ Une annonce reste valide pendant 30 secondes. La renouveler avant expiration, pa
 Installer Node.js et npm, puis exécuter dans le dossier du projet :
 
 ```bash
-npm ci
+npm install
 ```
 
 ## Connexion WebSocket — Étape A
@@ -112,13 +112,29 @@ npm run client -- ws://localhost:3000/ws imal
 
 Chaque client envoie un message register avec son identifiant. Le serveur confirme avec registered. Deux clients connectés ne peuvent pas utiliser le même identifiant.
 
+Une fois identifié, chaque client voit qui est en ligne. Par exemple, quand Imal se connecte, son terminal affiche `alice est en ligne` si Alice était déjà connectée. De son côté, le terminal d’Alice affiche `imal est en ligne`.
+
+Pour vérifier la déconnexion, arrête le client d’Imal avec Ctrl+C. Alice voit alors :
+
+```text
+imal est hors ligne
+```
+
+Le client reçoit ces changements sous la forme d’un événement `presence` :
+
+```json
+{"action":"presence","payload":{"id":"imal","status":"online"}}
+```
+
+`status` vaut `online` quand le client s’inscrit et `offline` quand il se déconnecte. Seuls les clients déjà identifiés reçoivent ces notifications.
+
 Dans le terminal d’Ibrahim, saisir :
 
 ```text
 imal Salut !
 ```
 
-Imal reçoit un message avec metadata.source, metadata.target, metadata.timestamp et payload.texte. Il peut répondre en saisissant ibrahim suivi de son texte. Le broker utilise l’identifiant de la connexion comme source. Un destinataire absent provoque une erreur affichée chez l’expéditeur. Les clients de ce test se connectent au même serveur.
+Imal reçoit un message avec metadata.source, metadata.target, metadata.timestamp et payload.texte. Il peut répondre en saisissant ibrahim suivi de son texte. Le broker utilise l’identifiant de la connexion comme source. Un destinataire absent entraîne une mise en file avec confirmation queued. Les clients de ce test se connectent au même serveur.
 
 ## Broadcast WebSocket
 
@@ -149,14 +165,8 @@ npm run client -- ws://localhost:3000/ws imal
 
 Imal reçoit les deux messages dans l’ordre. La file est conservée tant que le broker tourne, sans limite de durée ni de taille. Un redémarrage efface les messages. Les broadcasts concernent uniquement les clients connectés. La livraison se base sur la réussite de l’envoi WebSocket, sans accusé de lecture du destinataire.
 
-## Présence des clients
-
-Après identification, le client reçoit un événement presence pour chaque client en ligne. Les connexions et déconnexions sont annoncées aux autres clients identifiés avec payload.id et payload.statut (online ou offline).
-
-Pour tester, connecter ibrahim puis imal. Ibrahim reçoit la présence online d’Imal. Fermer Imal avec Ctrl+C : Ibrahim reçoit offline. À la reconnexion, il reçoit online.
-
 ## Messages HTTP /ingress
 
-Les messages HTTP exigent action et metadata contenant source et target sous forme d’origines HTTP, ainsi que timestamp au format ISO avec fuseau horaire. La commande message du terminal serveur construit ces métadonnées automatiquement.
+Les messages exigent metadata.source et metadata.target sous forme d’origines HTTP, et metadata.timestamp au format ISO avec fuseau horaire. La commande message du serveur construit ces champs.
 
-Une connexion établie est requise. Un premier message accepté reçoit 201. La convention retenue pour identifier un doublon est le même quadruplet action, source, target, timestamp : il reçoit 208. Cette convention reste à valider avec la classe. La mémoire des doublons est effacée au redémarrage.
+Le premier message est accepté avec 201. Le même quadruplet action, source, target et timestamp reçoit 208. Cette convention de doublon reste à valider avec la classe. La mémoire des doublons et les files sont effacées au redémarrage.

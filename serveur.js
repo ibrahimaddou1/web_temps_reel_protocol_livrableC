@@ -173,7 +173,6 @@ app.post('/ingress', (req, res) => {
   }
   if (pairs.get(pair)?.statut !== 'Ack') return res.sendStatus(403);
   const { action, metadata } = req.body;
-  // Convention : une action, source, destination et date identiques désignent le même message.
   const cle = JSON.stringify([action, metadata.source, metadata.target, metadata.timestamp]);
   if (messagesRecus.has(cle)) return res.sendStatus(208);
   console.log('Message reçu de', noms.get(pair) || pair, req.body);
@@ -299,14 +298,6 @@ websocket.on('error', err => {
 });
 // Le broker associe un identifiant à chaque connexion cliente.
 const clients = new Map();
-
-function annoncerPresence(id, statut) {
-  const message = JSON.stringify({ action: 'presence', payload: { id, statut } });
-  for (const client of clients.values()) {
-    if (client.readyState === 1) client.send(message);
-  }
-}
-
 const filesMessages = new Map();
 const livraisons = new Set();
 
@@ -318,9 +309,8 @@ async function livrerMessages(id) {
     while (file?.length) {
       const client = clients.get(id);
       if (!client || client.readyState !== 1) break;
-      const message = file[0];
       await new Promise((resolve, reject) => {
-        client.send(message, err => err ? reject(err) : resolve());
+        client.send(file[0], err => err ? reject(err) : resolve());
       });
       file.shift();
     }
@@ -332,12 +322,23 @@ async function livrerMessages(id) {
   }
 }
 
+function diffuserPresence(id, status, connexionExclue) {
+  const message = JSON.stringify({ action: 'presence', payload: { id, status } });
+  for (const connexion of clients.values()) {
+    if (connexion !== connexionExclue && connexion.readyState === 1) {
+      connexion.send(message, err => {
+        if (err) console.error('Échec de notification de présence :', err.message);
+      });
+    }
+  }
+}
+
 websocket.on('connection', connexion => {
   let clientId;
   connexion.on('close', () => {
-    if (clients.get(clientId) === connexion) {
+    if (clientId && clients.get(clientId) === connexion) {
       clients.delete(clientId);
-      annoncerPresence(clientId, 'offline');
+      diffuserPresence(clientId, 'offline');
     }
   });
 
@@ -362,13 +363,15 @@ websocket.on('connection', connexion => {
       clientId = id.trim();
       clients.set(clientId, connexion);
       connexion.send(JSON.stringify({ action: 'registered', payload: { id: clientId } }));
-      for (const id of clients.keys()) {
-        connexion.send(JSON.stringify({ action: 'presence', payload: { id, statut: 'online' } }));
+      for (const idEnLigne of clients.keys()) {
+        if (idEnLigne !== clientId) {
+          connexion.send(JSON.stringify({
+            action: 'presence',
+            payload: { id: idEnLigne, status: 'online' },
+          }));
+        }
       }
-      const presence = JSON.stringify({ action: 'presence', payload: { id: clientId, statut: 'online' } });
-      for (const [id, client] of clients) {
-        if (id !== clientId && client.readyState === 1) client.send(presence);
-      }
+      diffuserPresence(clientId, 'online', connexion);
       livrerMessages(clientId);
       return;
     }
@@ -424,5 +427,4 @@ readline.createInterface({ input: process.stdin }).on('line', async ligne => {
     console.error(err.message);
   }
 });
-
 

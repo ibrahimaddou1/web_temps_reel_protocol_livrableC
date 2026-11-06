@@ -115,6 +115,11 @@ function ecouterConnexion() {
     try {
       const message = JSON.parse(data.toString());
       if (message.action === 'registered') identifie = true;
+      if (message.action === 'presence') {
+        const { id, status } = message.payload;
+        console.log(`${id} est ${status === 'online' ? 'en ligne' : 'hors ligne'}`);
+        return;
+      }
     } catch {}
     console.log('Message reçu du serveur :', data.toString());
   });
