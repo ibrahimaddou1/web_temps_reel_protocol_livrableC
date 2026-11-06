@@ -1,0 +1,162 @@
+# TP WebSocket et P2P
+
+## Tracker HTTP — Livrable B
+
+Démarrer le tracker dans un terminal :
+
+```bash
+npm run tracker -- 4000
+```
+
+Dans un autre terminal, annoncer un serveur WebSocket (exemples pour Bash/WSL) :
+
+```bash
+curl -i -X POST http://localhost:4000/announce -H 'Content-Type: application/json' -d '{"id":"serveur-ibrahim","wsUrl":"ws://localhost:3000/ws"}'
+```
+
+Consulter les pairs en ligne :
+
+```bash
+curl http://localhost:4000/peers
+```
+
+`POST /announce` renvoie 201 à la création, 200 au renouvellement, 400 pour un format invalide et 409 si un identifiant actif désigne une autre URL. `GET /peers` renvoie 200 avec la liste dans `peers`.
+
+Une annonce reste valide pendant 30 secondes. La renouveler avant expiration, par exemple toutes les 10 secondes. Sans renouvellement, le pair disparaît de la liste. Les données sont conservées en mémoire. À ce stade, l’annonce se fait manuellement avec curl.
+
+## Installation
+
+Installer Node.js et npm, puis exécuter dans le dossier du projet :
+
+```bash
+npm ci
+```
+
+## Connexion WebSocket — Étape A
+
+Dans un premier terminal, démarrer le serveur :
+
+```bash
+npm start -- http://localhost:3000
+```
+
+Dans un deuxième terminal, démarrer le client :
+
+```bash
+npm run client -- ws://localhost:3000/ws
+```
+
+Le client affiche `Connecté au serveur WebSocket`. Le serveur affiche `Client WebSocket connecté`.
+
+Les connexions, les déconnexions et les erreurs WebSocket sont affichées dans le terminal.
+
+Le serveur envoie un ping WebSocket toutes les 5 secondes lorsqu’aucun pong n’est en attente. Le client répond automatiquement. Sans pong sous 15 secondes, le serveur ferme la connexion. Le client ferme aussi la connexion s’il ne reçoit aucun ping pendant 20 secondes. Un message indique la connexion perdue.
+
+Utiliser Ctrl+C pour arrêter le client ou le serveur.
+
+Pour tester depuis un autre ordinateur, remplacer `localhost` dans les deux commandes par l’IPv4 de l’ordinateur qui héberge le serveur. Le port 3000 doit être accessible depuis cet ordinateur.
+
+## Protocole HTTP entre camarades
+
+Les échanges HTTP sont implémentés dans `serveur.js`.
+
+Chaque camarade démarre son serveur avec sa propre IPv4, par exemple :
+
+```bash
+npm start -- http://172.20.10.2:3000
+```
+
+Dans ce même terminal, se connecter au serveur du camarade, par exemple :
+
+```text
+connect http://172.20.10.4:3001
+```
+
+Après la poignée de main, la console affiche `Connexion établie avec` le nom du camarade ou son URL. Les noms sont renseignés dans la Map `noms` de `serveur.js`.
+
+Pour envoyer un message à tous les camarades connectés :
+
+```text
+message {"action":"bonjour","payload":{"texte":"Salut !"}}
+```
+
+Le destinataire affiche `Message reçu de` avec le nom ou l’URL de l’expéditeur et le message.
+
+
+## Enregistrement automatique et messages privés — Livrable B
+
+Démarrer le tracker :
+
+```bash
+npm run tracker -- 4000
+```
+
+Dans un autre terminal, démarrer le serveur avec son URL, l’URL du tracker et son identifiant :
+
+```bash
+npm start -- http://localhost:3000 http://localhost:4000 serveur-ibrahim
+```
+
+Le serveur renouvelle automatiquement son annonce toutes les 10 secondes. Vérifier sa présence avec :
+
+```bash
+curl http://localhost:4000/peers
+```
+
+Démarrer deux clients dans deux terminaux :
+
+```bash
+npm run client -- ws://localhost:3000/ws ibrahim
+npm run client -- ws://localhost:3000/ws imal
+```
+
+Chaque client envoie un message register avec son identifiant. Le serveur confirme avec registered. Deux clients connectés ne peuvent pas utiliser le même identifiant.
+
+Dans le terminal d’Ibrahim, saisir :
+
+```text
+imal Salut !
+```
+
+Imal reçoit un message avec metadata.source, metadata.target, metadata.timestamp et payload.texte. Il peut répondre en saisissant ibrahim suivi de son texte. Le broker utilise l’identifiant de la connexion comme source. Un destinataire absent provoque une erreur affichée chez l’expéditeur. Les clients de ce test se connectent au même serveur.
+
+## Broadcast WebSocket
+
+Depuis un client identifié, envoyer un message à tous les autres clients identifiés et connectés au même broker :
+
+```text
+* Bonjour à tous !
+```
+
+La convention WebSocket est metadata.target = "*". L’expéditeur ne reçoit pas sa propre diffusion. L’identifiant "*" est réservé. Les messages privés fonctionnent avec le même format en indiquant l’identifiant du destinataire.
+
+## File de messages privés
+
+Si un destinataire est déconnecté, le broker conserve les messages privés dans une file en mémoire et répond à l’expéditeur avec l’action queued. Dès que le destinataire se reconnecte et s’identifie avec le même id, les messages sont envoyés dans leur ordre de réception.
+
+Pour tester, fermer le client imal avec Ctrl+C. Depuis ibrahim, saisir deux messages :
+
+```text
+imal Premier message
+imal Deuxième message
+```
+
+Relancer ensuite le client :
+
+```bash
+npm run client -- ws://localhost:3000/ws imal
+```
+
+Imal reçoit les deux messages dans l’ordre. La file est conservée tant que le broker tourne, sans limite de durée ni de taille. Un redémarrage efface les messages. Les broadcasts concernent uniquement les clients connectés. La livraison se base sur la réussite de l’envoi WebSocket, sans accusé de lecture du destinataire.
+
+## Présence des clients
+
+Après identification, le client reçoit un événement presence pour chaque client en ligne. Les connexions et déconnexions sont annoncées aux autres clients identifiés avec payload.id et payload.statut (online ou offline).
+
+Pour tester, connecter ibrahim puis imal. Ibrahim reçoit la présence online d’Imal. Fermer Imal avec Ctrl+C : Ibrahim reçoit offline. À la reconnexion, il reçoit online.
+
+## Messages HTTP /ingress
+
+Les messages HTTP exigent action et metadata contenant source et target sous forme d’origines HTTP, ainsi que timestamp au format ISO avec fuseau horaire. La commande message du terminal serveur construit ces métadonnées automatiquement.
+
+Une connexion établie est requise. Un premier message accepté reçoit 201. La convention retenue pour identifier un doublon est le même quadruplet action, source, target, timestamp : il reçoit 208. Cette convention reste à valider avec la classe. La mémoire des doublons est effacée au redémarrage.
