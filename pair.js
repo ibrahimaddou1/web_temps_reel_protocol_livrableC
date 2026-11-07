@@ -209,6 +209,7 @@ async function actualiser() {
     for (const pair of pairs) {
       if (connexionsSortantes.size >= limitePairs) break;
       if (pair.id === id || pair.wsUrl === adresse.href || connexionsSortantes.has(pair.id)) continue;
+              if (id > pair.id) continue;
       const connexion = new WebSocket(pair.wsUrl, { handshakeTimeout: 15000 });
       connexionsSortantes.set(pair.id, connexion);
       securiser(connexion, 'initiator', pair.id);

@@ -296,7 +296,6 @@ websocket.on('connection', connexion => {
 websocket.on('error', err => {
   console.error('Erreur serveur WebSocket :', err.message);
 });
-// Le broker associe un identifiant à chaque connexion cliente.
 const clients = new Map();
 const filesMessages = new Map();
 const livraisons = new Set();
@@ -379,7 +378,6 @@ websocket.on('connection', connexion => {
       connexion.send(JSON.stringify({ type: 'error', message: 'Identification requise' }));
       return;
     }
-    // Conserver la confirmation des échanges simples du livrable A.
     if (message.action !== 'message') {
       connexion.send(JSON.stringify({ type: 'message', action: 'confirmation', payload: message.payload }));
       return;
